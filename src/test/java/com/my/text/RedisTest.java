@@ -1,3 +1,5 @@
+package com.my.text;
+
 import com.my.YixueAppcation;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
