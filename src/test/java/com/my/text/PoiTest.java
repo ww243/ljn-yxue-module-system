@@ -34,10 +34,8 @@ import java.util.List;
  */
 @SpringBootTest(classes = YixueAppcation.class)
 @RunWith(SpringRunner.class)
-public class PoiTests {
+public class PoiTest {
 
-    @Autowired
-    private UserDao userDao;
     @Autowired
     private UserService userService;
 
@@ -63,7 +61,7 @@ public class PoiTests {
 
     @Test
     public void text(){
-        List<User> users = userDao.selectAll();
+        List<User> users = userService.selectAll(1,3);
         //导出设置的参数  参数:大标题,工作表名
         ExportParams exportParams = new ExportParams("用户数据", "用户");
         //导出工具   参数:导出的参数,对应的实体类,导出的集合
@@ -120,7 +118,7 @@ public class PoiTests {
 
     @Test
     public void PoiExport(){
-        List<User> list = userDao.selectAll();
+        List<User> list = userService.selectAll(1,3);
         //创建一个Excel文档
         Workbook workbook = new HSSFWorkbook();
 
