@@ -119,6 +119,7 @@ public class VideoServiceImpl implements VideoService {
         HashMap<String, Object> map = new HashMap<>();
         video.setVideoPath(null);
         try {
+            //进行es索引修改数据
             UpdateRequest updateRequest = new UpdateRequest("yingx", "yingxs", video.getId());
             updateRequest.doc(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"),XContentType.JSON);
             UpdateResponse update = restHighLevelClient.update(updateRequest, RequestOptions.DEFAULT);
@@ -188,8 +189,9 @@ public class VideoServiceImpl implements VideoService {
             String coverPath=videoPath1+"?x-oss-process=video/snapshot,t_0,f_jpg,w_0,h_0,m_fast,ar_auto";
             video.setVideoPath(videoPath1).setCoverPath(coverPath);
          try {
+             //进行es索引修改数据
              UpdateRequest updateRequest = new UpdateRequest("yingx","yingxs",id);
-            updateRequest.doc(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"),XContentType.JSON);
+             updateRequest.doc(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"),XContentType.JSON);
              UpdateResponse update = restHighLevelClient.update(updateRequest, RequestOptions.DEFAULT);
              System.out.println(update.status());
          } catch (Exception e) {
@@ -230,6 +232,7 @@ public class VideoServiceImpl implements VideoService {
             String coverPath=videoPath1+"?x-oss-process=video/snapshot,t_0,f_jpg,w_0,h_0,m_fast,ar_auto";
             video.setId(id).setVideoPath(videoPath1).setCoverPath(coverPath);
             try {
+                //进行es索引修改数据
                 UpdateRequest updateRequest = new UpdateRequest("yingx","yingxs",id);
                 updateRequest.doc(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"),XContentType.JSON);
                 UpdateResponse update = restHighLevelClient.update(updateRequest, RequestOptions.DEFAULT);
@@ -240,7 +243,9 @@ public class VideoServiceImpl implements VideoService {
             videoDao.updateByExampleSelective(video,example);
         }
     }
-
+    /**
+     *@Description:es检索模糊查询
+    */
     @Override
     public List<Video> selectHighlight(String content) {
         List<Video> list = new ArrayList();
