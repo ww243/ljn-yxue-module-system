@@ -150,7 +150,14 @@
                                     <li class="list-group-item" style="margin-bottom: 5px;padding: 0px;border: 2px solid white">
                                         <a href="javascript:;" onclick="javascript:$('#all').load('${path}/video/video.jsp');" class="list-group-item" id="a2">
                                             <button class="btn btn-warning btn-group-justified">
-                                                查看视频管理
+                                                查看视频
+                                            </button>
+                                        </a>
+                                    </li>
+                                    <li class="list-group-item" style="margin-bottom: 5px;padding: 0px;border: 2px solid white">
+                                        <a href="javascript:;" onclick="javascript:$('#all').load('${path}/video/searchVideo.jsp');" class="list-group-item" id="a2">
+                                            <button class="btn btn-warning btn-group-justified">
+                                                检索视频
                                             </button>
                                         </a>
                                     </li>

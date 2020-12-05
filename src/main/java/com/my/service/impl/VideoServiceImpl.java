@@ -1,5 +1,6 @@
 package com.my.service.impl;
 
+import com.alibaba.fastjson.JSONObject;
 import com.aliyun.oss.OSS;
 import com.my.annotcation.AddLog;
 import com.my.annotcation.AddRedis;
@@ -10,15 +11,38 @@ import com.my.example.VideoExample;
 import com.my.po.VideoPo;
 import com.my.service.VideoService;
 import com.my.util.AliyunUtils;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.session.RowBounds;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.delete.DeleteResponse;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.action.update.UpdateResponse;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
+import org.elasticsearch.search.fetch.subphase.highlight.HighlightField;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.naming.directory.SearchControls;
+import javax.naming.directory.SearchResult;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -32,6 +56,10 @@ public class VideoServiceImpl implements VideoService {
 
     @Autowired
     private VideoDao videoDao;
+    @Autowired
+    private RestHighLevelClient restHighLevelClient;
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
     /**
      *@Description:分页查询
@@ -65,6 +93,11 @@ public class VideoServiceImpl implements VideoService {
         video.setId(UUID.randomUUID().toString());
         video.setUploadTime(new Date());
         try {
+            //进入索引库进行添加
+            IndexRequest indexRequest = new IndexRequest("yingx","yingxs",video.getId());
+            indexRequest.source(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"), XContentType.JSON);
+            IndexResponse index = restHighLevelClient.index(indexRequest, RequestOptions.DEFAULT);
+            System.out.println(index.status());
             videoDao.insert(video);
             map.put("message","添加成功!");
             map.put("rows",video);
@@ -86,6 +119,10 @@ public class VideoServiceImpl implements VideoService {
         HashMap<String, Object> map = new HashMap<>();
         video.setVideoPath(null);
         try {
+            UpdateRequest updateRequest = new UpdateRequest("yingx", "yingxs", video.getId());
+            updateRequest.doc(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"),XContentType.JSON);
+            UpdateResponse update = restHighLevelClient.update(updateRequest, RequestOptions.DEFAULT);
+            System.out.println(update.status());
             videoDao.updateByPrimaryKeySelective(video);
             map.put("rows",video);
             map.put("message","修改成功!");
@@ -113,6 +150,8 @@ public class VideoServiceImpl implements VideoService {
         oss.shutdown();//关闭OSSClient
         String id = one.getId();//查一条数据id
         try {
+            //进行es索引删除数据
+            DeleteResponse delete = restHighLevelClient.delete(new DeleteRequest("yingx", "yingxs", video.getId()), RequestOptions.DEFAULT);
             videoDao.delete(video);//删除
             map.put("message","删除成功!");
         } catch (Exception e) {
@@ -148,7 +187,15 @@ public class VideoServiceImpl implements VideoService {
             String videoPath1="https://yingx-ljn.oss-cn-beijing.aliyuncs.com/video/"+newName;
             String coverPath=videoPath1+"?x-oss-process=video/snapshot,t_0,f_jpg,w_0,h_0,m_fast,ar_auto";
             video.setVideoPath(videoPath1).setCoverPath(coverPath);
-            videoDao.updateByExampleSelective(video,example);
+         try {
+             UpdateRequest updateRequest = new UpdateRequest("yingx","yingxs",id);
+            updateRequest.doc(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"),XContentType.JSON);
+             UpdateResponse update = restHighLevelClient.update(updateRequest, RequestOptions.DEFAULT);
+             System.out.println(update.status());
+         } catch (Exception e) {
+            e.printStackTrace();
+        }
+        videoDao.updateByExampleSelective(video,example);
         }
 
     /**
@@ -182,9 +229,71 @@ public class VideoServiceImpl implements VideoService {
             String videoPath1="https://yingx-ljn.oss-cn-beijing.aliyuncs.com/"+objectName1;
             String coverPath=videoPath1+"?x-oss-process=video/snapshot,t_0,f_jpg,w_0,h_0,m_fast,ar_auto";
             video.setId(id).setVideoPath(videoPath1).setCoverPath(coverPath);
+            try {
+                UpdateRequest updateRequest = new UpdateRequest("yingx","yingxs",id);
+                updateRequest.doc(JSONObject.toJSONStringWithDateFormat(video,"yyyy-MM-dd"),XContentType.JSON);
+                UpdateResponse update = restHighLevelClient.update(updateRequest, RequestOptions.DEFAULT);
+                System.out.println(update.status());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
             videoDao.updateByExampleSelective(video,example);
         }
     }
+
+    @Override
+    public List<Video> selectHighlight(String content) {
+        List<Video> list = new ArrayList();
+            try{
+                SearchRequest searchRequest = new SearchRequest();
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                HighlightBuilder highlightBuilder = new HighlightBuilder();
+                BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery();
+                //设置高亮
+                highlightBuilder.field("title").field("brief").requireFieldMatch(false).preTags("<font color='red'>").postTags("</font>");
+                //模糊查类型
+                queryBuilder.should(QueryBuilders.fuzzyQuery("title",content))
+                        .should(QueryBuilders.fuzzyQuery("brief",content))
+                        .should(QueryBuilders.wildcardQuery("title",content+"*"))
+                        .should(QueryBuilders.wildcardQuery("brief",content+"*"))
+                        .should(QueryBuilders.queryStringQuery(content).field("title").field("brief"));
+                //添加配置分类、高亮、模糊查类型
+                searchSourceBuilder.query(queryBuilder).highlighter(highlightBuilder);
+                //配置索引、类型
+                searchRequest.indices("yingx").types("yingxs").source(searchSourceBuilder);
+                SearchResponse search = restHighLevelClient.search(searchRequest, RequestOptions.DEFAULT);
+                System.out.println(search);
+
+                //遍历数据
+                SearchHit[] hits = search.getHits().getHits();
+                for (SearchHit hit : hits) {
+                    Map<String, Object> asMap = hit.getSourceAsMap();
+                    Map<String, HighlightField> highlightFields = hit.getHighlightFields();
+                    Video video = new Video();
+                        video.setId(hit.getId());
+                        video.setTitle(String.valueOf(asMap.get("title")));
+                        if (highlightFields.containsKey("title")){
+                            video.setTitle(String.valueOf(highlightFields.get("title").fragments()[0]));
+                        }
+                        video.setBrief(String.valueOf(asMap.get("brief")));
+                        if (highlightFields.containsKey("brief")){
+                            video.setBrief(String.valueOf(highlightFields.get("brief").fragments()[0]));
+                        }
+                    video.setCoverPath(String.valueOf(asMap.get("coverPath")));
+                    String uploadTime = String.valueOf(asMap.get("uploadTime"));
+                    SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+                    Date date = format.parse(uploadTime);
+                    video.setUploadTime(date);
+                    list.add(video);
+                }
+            }catch (Exception e){
+             e.printStackTrace();
+            }
+        return list;
+    }
+
+
+
     /**
      *@Description:前台
     */

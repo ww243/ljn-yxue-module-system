@@ -26,6 +26,8 @@ public interface VideoService {
     void insertAliyun(MultipartFile videoPath, String id);
     //修改阿里云服务器
     void modfiyAliyun(MultipartFile videoPath, String id);
+    //es高亮查询
+    List<Video>  selectHighlight(String content);
 
 
     /**
